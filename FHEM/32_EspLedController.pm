@@ -512,12 +512,6 @@ sub EspLedController_Set(@) {
   elsif ( $cmd eq 'raw' ) {
     my ( $red, $green, $blue, $ww, $cw ) = split ',', $args[0];
 
-    $red   = undef if ( length($red) == 0 );
-    $green = undef if ( length($green) == 0 );
-    $blue  = undef if ( length($blue) == 0 );
-    $ww    = undef if ( length($ww) == 0 );
-    $cw    = undef if ( length($cw) == 0 );
-
     EspLedController_SetRAWColor( $hash, $red, $green, $blue, $ww, $cw, $colorTemp, $fadeTime, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'continue' || $cmd eq 'pause' || $cmd eq 'skip' || $cmd eq 'stop' ) {
@@ -1203,8 +1197,6 @@ sub EspLedController_UpdateReadingsRaw(@) {
 
 sub EspLedController_SetRAWColor(@) {
   my ( $hash, $red, $green, $blue, $warmWhite, $coldWhite, $colorTemp, $fadeTime, $transitionType, $doQueue, $direction, $doReQueue, $name ) = @_;
-  Log3( $hash, 3,
-    "$hash->{NAME}: called SetRAWColor $red, $green, $blue, $warmWhite, $coldWhite, $colorTemp, $fadeTime, $transitionType, $doQueue, $direction" );
 
   my $param = EspLedController_GetHttpParams( $hash, "POST", "color", "" );
   $param->{parser} = \&EspLedController_ParseBoolResult;
@@ -1229,7 +1221,6 @@ sub EspLedController_SetRAWColor(@) {
     return undef;
   }
 
-  Log3( $hash, 4, "$hash->{NAME}: set RAW color request r:$red g:$green b:$blue ww:$warmWhite cw:$coldWhite" );
   EspLedController_addCall( $hash, $param );
 }
 
