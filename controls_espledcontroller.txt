@@ -1,2 +1,2 @@
 DEL ./FHEM/32_EspLedController.pm
-UPD 2021-03-19_12:00:00 57047  FHEM/32_EspLedController.pm
+UPD 2025-10-20_12:00:00 57326  FHEM/32_EspLedController.pm

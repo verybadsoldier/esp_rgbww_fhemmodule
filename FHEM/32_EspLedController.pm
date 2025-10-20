@@ -68,7 +68,7 @@ sub EspLedController_Define($$) {
   $attr{$name}{webCmd} = 'rgb' if (!defined($attr{$name}{webCmd}));
   $attr{$name}{icon} = 'light_led_stripe_rgb' if (!defined($attr{$name}{icon}));
   
-  return undef if IsDisabled($hash);
+  return undef if IsDisabled( $hash->{NAME} );
   
   EspLedController_GetInfo($hash);
   EspLedController_GetConfig($hash);
@@ -275,7 +275,7 @@ sub EspLedController_ParseMsg($$) {
 sub EspLedController_Get(@) {
   my ( $hash, $name, $cmd, @args ) = @_;
 
-  return undef if IsDisabled($hash);
+  return undef if IsDisabled( $hash->{NAME} );
 
   my $cnt = @args;
 
@@ -313,12 +313,18 @@ sub EspLedController_ColorRangeCheck(@) {
   return $result;
 }
 
+sub EspLedController_UnknownSet {
+    my ( $hash, $name, $cmd, @args ) = @_;
+
+    my $cmdList = "hsv:colorpicker,HSV,hue,0,1,360,sat,0,1,100,val,0,1,100 rgb:colorpicker,RGB state hue:slider,0,0.1,360 sat:slider,0,1,100 white stop val:slider,0,1,100 pct:slider,0,1,100 dim:slider,0,1,100 dimup:slider,0,1,100 dimdown:slider,0,1,100 on off toggle toggle_fw raw pause continue blink skip config restart fw_update ct:colorpicker,CT,2700,10,6000 rotate security";
+    return SetExtensions( $hash, $cmdList, $name, $cmd, @args );
+}
+
 sub EspLedController_Set(@);
 sub EspLedController_Set(@) {
   my ( $hash, $name, $cmd, @args ) = @_;
   
-  return undef if IsDisabled($hash);
-  
+
   Log3( $hash, 5, "$hash->{NAME} (Set) called with $cmd, busy flag is $hash->{helper}->{isBusy}\n name is $name, args " . Dumper(@args) );
 
   my ( $argsError, $fadeTime, $fadeSpeed, $doQueue, $direction, $doRequeue, $fadeName, $transitionType, $channels, $colorTemp );
@@ -337,6 +343,12 @@ sub EspLedController_Set(@) {
   }
 
   return $argsError if defined($argsError);
+
+  if ( $cmd eq '?' ) {
+    return EspLedController_UnknownSet( $hash, $name, $cmd, @args );
+  }
+
+  return undef if IsDisabled( $hash->{NAME} );
 
   if ( $cmd eq 'hsv' ) {
 
@@ -598,8 +610,7 @@ sub EspLedController_Set(@) {
     EspLedController_GetConfig($hash);
   }
   else {
-    my $cmdList = "hsv:colorpicker,HSV,hue,0,1,360,sat,0,1,100,val,0,1,100 rgb:colorpicker,RGB state hue:slider,0,0.1,360 sat:slider,0,1,100 white stop val:slider,0,1,100 pct:slider,0,1,100 dim:slider,0,1,100 dimup:slider,0,1,100 dimdown:slider,0,1,100 on off toggle toggle_fw raw pause continue blink skip config restart fw_update ct:colorpicker,CT,2700,10,6000 rotate security";
-    return SetExtensions( $hash, $cmdList, $name, $cmd, @args );
+    return EspLedController_UnknownSet();
   }
 
   return undef;
@@ -704,7 +715,7 @@ sub EspLedController_Attr(@) {
       DevIo_CloseDev($hash);
       $hash->{STATE} = "Disabled";
     } else {
-      if (IsDisabled($hash)) {
+      if (IsDisabled( $hash->{NAME} )) {
         $hash->{STATE} = "Initialized";
            
         EspLedController_Connect( $hash, 0 );
@@ -1281,7 +1292,7 @@ sub EspLedController_addCall(@) {
 sub EspLedController_doCall(@) {
   my ($hash) = @_;
 
-  return undef if IsDisabled($hash);
+  return undef if IsDisabled( $hash->{NAME} );
 
   return unless scalar @{ $hash->{helper}->{cmdQueue} };
 
@@ -1300,7 +1311,7 @@ sub EspLedController_callback(@) {
   my ( $param, $err, $data ) = @_;
   my ($hash) = $param->{hash};
   
-  return undef if IsDisabled($hash);
+  return undef if IsDisabled( $hash->{NAME} );
 
   if (!$err && $param->{code} != 200 && $param->{httpheader} =~ m/Retry-After: (\d)/) {
     # TODO: Retry-After with timestamp not supported
