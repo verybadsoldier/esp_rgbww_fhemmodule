@@ -1320,7 +1320,6 @@ sub EspLedController_doCall(@) {
 sub EspLedController_callback(@) {
   my ( $param, $err, $data ) = @_;
   my ($hash) = $param->{hash};
-
   $hash->{helper}->{isBusy} = 0;
 
   return undef if IsDisabled( $hash->{NAME} );
