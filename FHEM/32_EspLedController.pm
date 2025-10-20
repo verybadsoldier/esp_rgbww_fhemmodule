@@ -68,7 +68,7 @@ sub EspLedController_Define($$) {
   $attr{$name}{webCmd} = 'rgb' if (!defined($attr{$name}{webCmd}));
   $attr{$name}{icon} = 'light_led_stripe_rgb' if (!defined($attr{$name}{icon}));
   
-  return undef if IsDisabled($hash);
+  return undef if IsDisabled( $hash->{NAME} );
   
   EspLedController_GetInfo($hash);
   EspLedController_GetConfig($hash);
@@ -275,7 +275,7 @@ sub EspLedController_ParseMsg($$) {
 sub EspLedController_Get(@) {
   my ( $hash, $name, $cmd, @args ) = @_;
 
-  return undef if IsDisabled($hash);
+  return undef if IsDisabled( $hash->{NAME} );
 
   my $cnt = @args;
 
@@ -313,20 +313,27 @@ sub EspLedController_ColorRangeCheck(@) {
   return $result;
 }
 
+sub EspLedController_UnknownSet {
+    my ( $hash, $name, $cmd, @args ) = @_;
+
+    my $cmdList = "hsv:colorpicker,HSV,hue,0,1,360,sat,0,1,100,val,0,1,100 rgb:colorpicker,RGB state hue:slider,0,0.1,360 sat:slider,0,1,100 white stop val:slider,0,1,100 pct:slider,0,1,100 dim:slider,0,1,100 dimup:slider,0,1,100 dimdown:slider,0,1,100 on off toggle toggle_fw raw pause continue blink skip config restart fw_update ct:colorpicker,CT,2700,10,6000 rotate security";
+    return SetExtensions( $hash, $cmdList, $name, $cmd, @args );
+}
+
 sub EspLedController_Set(@);
 sub EspLedController_Set(@) {
   my ( $hash, $name, $cmd, @args ) = @_;
   
-  return undef if IsDisabled($hash);
-  
+
   Log3( $hash, 5, "$hash->{NAME} (Set) called with $cmd, busy flag is $hash->{helper}->{isBusy}\n name is $name, args " . Dumper(@args) );
 
-  my ( $argsError, $fadeTime, $fadeSpeed, $doQueue, $direction, $doRequeue, $fadeName, $transitionType, $channels, $colorTemp );
+  my ( $argsError, $fadeTime, $fadeSpeed, $doQueue, $direction, $doRequeue, $fadeName, $stay, $channels );
+
   if ( $cmd ne "?" ) {
     my %argCmds = ( 'on' => 0, 'off' => 0, 'toggle' => 0, 'blink' => 0, 'pause' => 0, 'skip' => 0, 'continue' => 0, 'stop' => 0 );
     my $argsOffset = 1;
     $argsOffset = $argCmds{$cmd} if ( exists $argCmds{$cmd} );
-    ( $argsError, $fadeTime, $fadeSpeed, $doQueue, $direction, $doRequeue, $fadeName, $transitionType, $channels ) =
+    ( $argsError, $fadeTime, $fadeSpeed, $doQueue, $direction, $doRequeue, $fadeName, $stay, $channels ) =
       EspLedController_ArgsHelper( $hash, $argsOffset, @args );
     if ( !defined($fadeTime) && !defined($fadeSpeed) && ( $cmd ne 'blink' ) ) {
       $fadeTime = AttrVal( $hash->{NAME}, 'defaultRamp', 700 );
@@ -338,18 +345,23 @@ sub EspLedController_Set(@) {
 
   return $argsError if defined($argsError);
 
+  if ( $cmd eq '?' ) {
+    return EspLedController_UnknownSet( $hash, $name, $cmd, @args );
+  }
+
+  return undef if IsDisabled( $hash->{NAME} );
+
   if ( $cmd eq 'hsv' ) {
 
     # expected args: <hue:0-360>,<sat:0-100>,<val:0-100>
     # HSV color values --> $hue, $sat and $val are split from arg1
-    my ( $hue, $sat, $val ) = split ',', $args[0];
+    my ($hue, $sat, $val, $colorTemp) = split /,/, $args[0], -1;
+    for my $ref (\$hue, \$sat, \$val, \$colorTemp) {
+        $$ref = undef if length($$ref // '') == 0;
+    }
 
-    $hue = undef if ( length($hue) == 0 );
-    $sat = undef if ( length($sat) == 0 );
-    $val = undef if ( length($val) == 0 );
-
-    if ( !defined($hue) && !defined($sat) && !defined($val) ) {
-      my $msg = "$hash->{NAME} at least one of HUE, SAT or VAL must be set";
+    if ( !defined($hue) && !defined($sat) && !defined($val) && !defined($colorTemp) ) {
+      my $msg = "$hash->{NAME} at least one of HUE, SAT or VAL or COLORTEMP must be set";
       Log3( $hash, 3, $msg );
       return $msg;
     }
@@ -369,7 +381,16 @@ sub EspLedController_Set(@) {
       return $msg;
     }
 
-    EspLedController_SetHSVColor( $hash, $hue, $sat, $val, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
+
+    if (defined $colorTemp) {
+      my $msg = EspLedController_ColorRangeCheck( $hash, $colorTemp );
+      if (defined $msg) {
+        Log3( $hash, 3, $msg );
+        return $msg;
+      }
+    }
+
+    EspLedController_SetHSVColor( $hash, $hue, $sat, $val, $colorTemp, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'rgb' ) {
 
@@ -389,14 +410,14 @@ sub EspLedController_Set(@) {
     my $blue  = hex( substr( $args[0], 4, 2 ) );
     Log3( $hash, 5, "$hash->{NAME} raw: $args[0], r: $red, g: $green, b: $blue" );
     my ( $hue, $sat, $val ) = EspLedController_RGB2HSV( $hash, $red, $green, $blue );
-    EspLedController_SetHSVColor( $hash, $hue, $sat, $val, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
+    EspLedController_SetHSVColor( $hash, $hue, $sat, $val, undef, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'ct' ) {
     my $colorTemp = $args[0];
     my $res = EspLedController_ColorRangeCheck( $hash, $colorTemp );
     return $res if ($res);
 
-    EspLedController_SetHSVColor( $hash, undef, undef, undef, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
+    EspLedController_SetHSVColor( $hash, undef, undef, undef, $colorTemp, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'white' ) {
     my $colorTemp = undef;
@@ -407,7 +428,7 @@ sub EspLedController_Set(@) {
         return $res if ($res);
     }
 
-    EspLedController_SetHSVColor( $hash, undef, 0, undef, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
+    EspLedController_SetHSVColor( $hash, undef, 0, undef, $colorTemp, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'on' ) {
 
@@ -423,7 +444,7 @@ sub EspLedController_Set(@) {
       $val = 100;
     }
 
-    EspLedController_SetHSVColor( $hash, undef, undef, $val, undef, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
+    EspLedController_SetHSVColor( $hash, undef, undef, $val, undef, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'off' ) {
 
@@ -431,7 +452,7 @@ sub EspLedController_Set(@) {
     $hash->{helper}->{oldVal} = ReadingsVal( $hash->{NAME}, "val", 0 );
 
     # Now set val to zero, read other values and "turn out the light"...
-    EspLedController_SetHSVColor( $hash, "+0", "+0", 0, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
+    EspLedController_SetHSVColor( $hash, "+0", "+0", 0, undef, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'toggle' ) {
     my $state = ReadingsVal( $hash->{NAME}, "stateLight", "off" );
@@ -453,14 +474,14 @@ sub EspLedController_Set(@) {
 
     # dimming value is first parameter, add to $val and keep hue and sat the way they were.
     my $dim = $args[0];
-    EspLedController_SetHSVColor( $hash, undef, undef, "+" . $dim, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue,
+    EspLedController_SetHSVColor( $hash, undef, undef, "+" . $dim, undef, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue,
       $fadeName );
   }
   elsif ( $cmd eq "dimdown" || $cmd eq "down" ) {
 
     # dimming value is first parameter, add to $val and keep hue and sat the way they were.
     my $dim = $args[0];
-    EspLedController_SetHSVColor( $hash, undef, undef, "-" . $dim, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue,
+    EspLedController_SetHSVColor( $hash, undef, undef, "-" . $dim, undef, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue,
       $fadeName );
   }
   elsif ( $cmd eq 'val' || $cmd eq 'dim' || $cmd eq 'pct' ) {
@@ -476,7 +497,7 @@ sub EspLedController_Set(@) {
     }
 
     Log3( $hash, 5, "$hash->{NAME} setting VAL to $val" );
-    EspLedController_SetHSVColor( $hash, undef, undef, $val, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
+    EspLedController_SetHSVColor( $hash, undef, undef, $val, undef, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'sat' ) {
 
@@ -491,7 +512,7 @@ sub EspLedController_Set(@) {
     }
 
     Log3( $hash, 5, "$hash->{NAME} setting SAT to $sat" );
-    EspLedController_SetHSVColor( $hash, undef, $sat, undef, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
+    EspLedController_SetHSVColor( $hash, undef, $sat, undef, undef, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'hue' ) {
 
@@ -507,12 +528,12 @@ sub EspLedController_Set(@) {
 
     Log3( $hash, 5, "$hash->{NAME} setting HUE to $hue" );
 
-    EspLedController_SetHSVColor( $hash, $hue, undef, undef, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
+    EspLedController_SetHSVColor( $hash, $hue, undef, undef, undef, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'raw' ) {
     my ( $red, $green, $blue, $ww, $cw ) = split ',', $args[0];
 
-    EspLedController_SetRAWColor( $hash, $red, $green, $blue, $ww, $cw, $colorTemp, $fadeTime, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
+    EspLedController_SetRAWColor( $hash, $red, $green, $blue, $ww, $cw, $fadeTime, $stay, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'continue' || $cmd eq 'pause' || $cmd eq 'skip' || $cmd eq 'stop' ) {
     EspLedController_SetChannelCommand( $hash, $cmd, $channels );
@@ -572,7 +593,7 @@ sub EspLedController_Set(@) {
 
     my $rot = $args[0];
     Log3( $hash, 2, "$hash->{NAME}: Command 'rotate' is deprecated! Please use 'hue' or 'hsv' wit relative values (+/-xxx)!" );
-    EspLedController_SetHSVColor( $hash, "+$rot", undef, undef, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue, $fadeName );
+    EspLedController_SetHSVColor( $hash, "+$rot", undef, undef, undef, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $fadeName );
   }
   elsif ( $cmd eq 'security' ) {
     return "Invalid syntax: Use 'set <device> security <0|1> [<password>]'" if ( @args == 0 );
@@ -598,8 +619,7 @@ sub EspLedController_Set(@) {
     EspLedController_GetConfig($hash);
   }
   else {
-    my $cmdList = "hsv:colorpicker,HSV,hue,0,1,360,sat,0,1,100,val,0,1,100 rgb:colorpicker,RGB state hue:slider,0,0.1,360 sat:slider,0,1,100 white stop val:slider,0,1,100 pct:slider,0,1,100 dim:slider,0,1,100 dimup:slider,0,1,100 dimdown:slider,0,1,100 on off toggle toggle_fw raw pause continue blink skip config restart fw_update ct:colorpicker,CT,2700,10,6000 rotate security";
-    return SetExtensions( $hash, $cmdList, $name, $cmd, @args );
+    return EspLedController_UnknownSet();
   }
 
   return undef;
@@ -704,7 +724,7 @@ sub EspLedController_Attr(@) {
       DevIo_CloseDev($hash);
       $hash->{STATE} = "Disabled";
     } else {
-      if (IsDisabled($hash)) {
+      if (IsDisabled( $hash->{NAME} )) {
         $hash->{STATE} = "Initialized";
            
         EspLedController_Connect( $hash, 0 );
@@ -1094,7 +1114,7 @@ sub EspLedController_EncodeJson($$) {
 }
 
 sub EspLedController_SetHSVColor(@) {
-  my ( $hash, $hue, $sat, $val, $colorTemp, $fadeTime, $fadeSpeed, $transitionType, $doQueue, $direction, $doRequeue, $name ) = @_;
+  my ( $hash, $hue, $sat, $val, $colorTemp, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $name ) = @_;
   Log3( $hash, 5, "$hash->{NAME}: called SetHSVColor");# $hue, $sat, $val, $colorTemp, $fadeTime, $transitionType, $doQueue, $direction, $doRequeue, $name)" );
 
   if ( !defined($hue) && !defined($sat) && !defined($val) && !defined($colorTemp) ) {
@@ -1114,13 +1134,16 @@ sub EspLedController_SetHSVColor(@) {
   $cmd->{hsv}->{s}  = $sat            if defined($sat);
   $cmd->{hsv}->{v}  = $val            if defined($val);
   $cmd->{hsv}->{ct} = $colorTemp      if defined($colorTemp);
-  $cmd->{cmd}       = $transitionType if defined($transitionType);
+  $cmd->{stay}      = $stay           if defined($stay);
   $cmd->{t}         = $fadeTime       if defined($fadeTime);
   $cmd->{s}         = $fadeSpeed      if defined($fadeSpeed);
   $cmd->{q}         = $doQueue        if defined($doQueue);
-  $cmd->{d}         = $direction      if defined($direction);
   $cmd->{r}         = $doRequeue      if defined($doRequeue);
   $cmd->{name}      = $name           if defined($name);
+
+  if (defined($direction)) {
+    $cmd->{d} = ($direction eq 1) ? "long" : "short";
+  }
 
   my $data;
   eval { $data = JSON->new->utf8(1)->encode($cmd); };
@@ -1128,7 +1151,6 @@ sub EspLedController_SetHSVColor(@) {
     Log3( $hash, 2, "$hash->{NAME}: error encoding HSV color request $@" );
   }
   else {
-
     Log3( $hash, 5, "$hash->{NAME}: encoded json data: $data " );
 
     my $param = {
@@ -1196,7 +1218,7 @@ sub EspLedController_UpdateReadingsRaw(@) {
 }
 
 sub EspLedController_SetRAWColor(@) {
-  my ( $hash, $red, $green, $blue, $warmWhite, $coldWhite, $colorTemp, $fadeTime, $transitionType, $doQueue, $direction, $doReQueue, $name ) = @_;
+  my ( $hash, $red, $green, $blue, $warmWhite, $coldWhite, $fadeTime, $transitionType, $doQueue, $direction, $doReQueue, $name ) = @_;
 
   my $param = EspLedController_GetHttpParams( $hash, "POST", "color", "" );
   $param->{parser} = \&EspLedController_ParseBoolResult;
@@ -1207,7 +1229,6 @@ sub EspLedController_SetRAWColor(@) {
   $body->{raw}->{b}  = $blue           if defined($blue);
   $body->{raw}->{ww} = $warmWhite      if defined($warmWhite);
   $body->{raw}->{cw} = $coldWhite      if defined($coldWhite);
-  $body->{raw}->{ct} = $colorTemp      if defined($colorTemp);
   $body->{cmd}       = $transitionType if defined($transitionType);
   $body->{t}         = $fadeTime       if defined($fadeTime);
   $body->{q}         = $doQueue        if defined($doQueue);
@@ -1281,7 +1302,7 @@ sub EspLedController_addCall(@) {
 sub EspLedController_doCall(@) {
   my ($hash) = @_;
 
-  return undef if IsDisabled($hash);
+  return undef if IsDisabled( $hash->{NAME} );
 
   return unless scalar @{ $hash->{helper}->{cmdQueue} };
 
@@ -1299,8 +1320,10 @@ sub EspLedController_doCall(@) {
 sub EspLedController_callback(@) {
   my ( $param, $err, $data ) = @_;
   my ($hash) = $param->{hash};
-  
-  return undef if IsDisabled($hash);
+
+  $hash->{helper}->{isBusy} = 0;
+
+  return undef if IsDisabled( $hash->{NAME} );
 
   if (!$err && $param->{code} != 200 && $param->{httpheader} =~ m/Retry-After: (\d)/) {
     # TODO: Retry-After with timestamp not supported
@@ -1309,8 +1332,6 @@ sub EspLedController_callback(@) {
     return undef;
   }
   
-  $hash->{helper}->{isBusy} = 0;
-
   # do the result-parser callback
   my $parser = $param->{parser};
   &$parser( $hash, $err, $data );
@@ -1408,8 +1429,8 @@ sub EspLedController_ArgsHelper(@) {
 
   my ( $channels, $requeue, $flags, $time, $speed, $name );
   my $queue          = 'single';
-  my $d              = '1';
-  my $transitionType = 'fade';
+  my $d              = '0';
+  my $stay = 0;    # stay time for color after fade
   for my $i ( $offset .. $#args ) {
     my $arg = $args[$i];
     if ( $arg =~ /\((.*)\)/ ) {
@@ -1421,6 +1442,10 @@ sub EspLedController_ArgsHelper(@) {
     }
     elsif ( substr( $arg, 0, 1 ) eq "s" && EspLedController_isNumeric( substr( $arg, 1 ) ) ) {
       $speed = substr( $arg, 1 );
+    }
+    elsif ( $arg =~ m/s\d/i ) {
+      # take numeric value after s
+      $stay = substr($arg, 1);
     }
     else {
       ( $flags, $name ) = split /:/, $arg;
@@ -1439,13 +1464,12 @@ sub EspLedController_ArgsHelper(@) {
       }
 
       $requeue = 'true' if ( $flags =~ m/r/i );
-      $d = ( $flags =~ m/l/ ) ? 0 : 1;
-
-      $transitionType = 'solid' if ( $flags =~ m/s/i );
+      $d = ( $flags =~ m/l/i ) ? 1 : 0;
     }
   }
-  #Log3( $hash, 5, "$hash->{NAME}: EspLedController_ArgsHelper: Time: $time | Speed: $speed | Q: $queue | RQ: $requeue | Name: $name | trans: $transitionType | Ch: $channels" );
-  return ( undef, $time, $speed, $queue, $d, $requeue, $name, $transitionType, $channels );
+
+  Log3( $hash, 5, "$hash->{NAME}: EspLedController_ArgsHelper: Time: " . ($time // '') . " | Speed: " . ($speed // '') . " | Q: $queue | RQ: " . ($requeue // '') . " | Dir: $d | Name: " . ($name//'') . " | stay: $stay | Ch: " . ($channels // ''));
+  return ( undef, $time, $speed, $queue, $d, $requeue, $name, $stay, $channels );
 }
 
 sub EspLedController_isNumeric {
