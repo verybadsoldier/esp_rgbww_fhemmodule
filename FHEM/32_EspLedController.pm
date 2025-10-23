@@ -305,7 +305,7 @@ sub EspLedController_ColorRangeCheck(@) {
     $result = "No color temperature limits found. Controller config incomplete. Please issue a get config";
   }
   
-  if( !EspLedController_rangeCheck( $colorTemp, $ww, $cw, 0) ){
+  if( !EspLedController_rangeCheck( $colorTemp, $ww, $cw) ){
     $result = "Color temperatur $colorTemp is out of range! Supported range is $ww to $cw";
   }
   
@@ -1480,10 +1480,9 @@ sub EspLedController_isNumericRelative {
 }
 
 sub EspLedController_rangeCheck(@) {
-  my ( $val, $min, $max, $canBeRelative ) = @_;
+  my ( $val, $min, $max ) = @_;
   
-  $canBeRelative = 1 if !defined($canBeRelative);
-  return 1 if EspLedController_isNumericRelative($val) and $canBeRelative;
+  return 1 if EspLedController_isNumericRelative($val);
   return EspLedController_isNumeric($val) && $val >= $min && $val <= $max;
 }
 
