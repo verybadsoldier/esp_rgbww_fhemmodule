@@ -1442,9 +1442,9 @@ sub EspLedController_ArgsHelper(@) {
     elsif ( substr( $arg, 0, 1 ) eq "s" && EspLedController_isNumeric( substr( $arg, 1 ) ) ) {
       $speed = substr( $arg, 1 );
     }
-    elsif ( $arg =~ m/s\d/i ) {
-      # take numeric value after s
-      $stay = substr($arg, 1);
+    elsif ( $arg =~ m/\ds/i ) {
+      # take numeric value before "s"
+      $stay = substr( $arg, 0, -1 ) * 1000;
     }
     else {
       ( $flags, $name ) = split /:/, $arg;
@@ -1472,11 +1472,11 @@ sub EspLedController_ArgsHelper(@) {
 }
 
 sub EspLedController_isNumeric {
-  defined $_[0] && $_[0] =~ /^\d+.?\d*/;
+  defined $_[0] && $_[0] =~ /^\d+\.?\d*$/;
 }
 
 sub EspLedController_isNumericRelative {
-  defined $_[0] && $_[0] =~ /^[+-]\d+.?\d*/;
+  defined $_[0] && $_[0] =~ /^[+-]\d+\.?\d*$/;
 }
 
 sub EspLedController_rangeCheck(@) {
