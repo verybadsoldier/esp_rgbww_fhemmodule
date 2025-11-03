@@ -1151,7 +1151,7 @@ sub EspLedController_SetHSVColor(@) {
     Log3( $hash, 2, "$hash->{NAME}: error encoding HSV color request $@" );
   }
   else {
-    Log3( $hash, 5, "$hash->{NAME}: encoded json data: $data " );
+    Log3( $hash, 4, "$hash->{NAME}: encoded json data: $data " );
 
     my $param = {
       url      => "http://$ip/color",
@@ -1218,7 +1218,7 @@ sub EspLedController_UpdateReadingsRaw(@) {
 }
 
 sub EspLedController_SetRAWColor(@) {
-  my ( $hash, $red, $green, $blue, $warmWhite, $coldWhite, $fadeTime, $transitionType, $doQueue, $direction, $doReQueue, $name ) = @_;
+  my ( $hash, $red, $green, $blue, $warmWhite, $coldWhite, $fadeTime, $stay, $doQueue, $direction, $doReQueue, $name ) = @_;
 
   my $param = EspLedController_GetHttpParams( $hash, "POST", "color", "" );
   $param->{parser} = \&EspLedController_ParseBoolResult;
@@ -1229,18 +1229,23 @@ sub EspLedController_SetRAWColor(@) {
   $body->{raw}->{b}  = $blue           if defined($blue);
   $body->{raw}->{ww} = $warmWhite      if defined($warmWhite);
   $body->{raw}->{cw} = $coldWhite      if defined($coldWhite);
-  $body->{cmd}       = $transitionType if defined($transitionType);
+  $body->{stay}      = $stay           if defined($stay);
   $body->{t}         = $fadeTime       if defined($fadeTime);
   $body->{q}         = $doQueue        if defined($doQueue);
-  $body->{d}         = $direction      if defined($direction);
   $body->{r}         = $doReQueue      if defined($doReQueue);
   $body->{name}      = $name           if defined($name);
+
+  if (defined($direction)) {
+    $body->{d} = ($direction eq 1) ? "long" : "short";
+  }
 
   eval { $param->{data} = EspLedController_EncodeJson( $hash, $body ) };
   if ($@) {
     Log3( $hash, 2, "$hash->{NAME}: error encoding RAW color request $@" );
     return undef;
   }
+
+  Log3( $hash, 4, "$hash->{NAME}: encoded json data: $param->{data} " );
 
   EspLedController_addCall( $hash, $param );
 }
