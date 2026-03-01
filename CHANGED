@@ -1,5 +1,3 @@
 LedController last change:
-2017-01-30
- - Merge pull request #21 from ShuzzDE/develop
-
-Asynchronous update of readings
+2026-03-01
+ - add compability for older firmwares (<6)

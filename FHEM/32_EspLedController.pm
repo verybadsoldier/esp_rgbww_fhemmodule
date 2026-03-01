@@ -1113,6 +1113,18 @@ sub EspLedController_EncodeJson($$) {
   return $data;
 }
 
+sub EspLedController_GetFwMajorVersion($) {
+  my ( $hash ) = @_;
+  my $rawFw = ReadingsVal( $hash->{NAME}, "info-firmware", "6" );
+
+  if ($rawFw =~ /^\D*(\d+)\./) {
+    return $1;
+  }
+
+  Log3( $hash, 2, "$hash->{NAME}: error parsing info-firmware string: $rawFw" );
+  return undef;
+}
+
 sub EspLedController_SetHSVColor(@) {
   my ( $hash, $hue, $sat, $val, $colorTemp, $fadeTime, $fadeSpeed, $stay, $doQueue, $direction, $doRequeue, $name ) = @_;
   Log3( $hash, 5, "$hash->{NAME}: called SetHSVColor");# $hue, $sat, $val, $colorTemp, $fadeTime, $transitionType, $doQueue, $direction, $doRequeue, $name)" );
@@ -1134,15 +1146,25 @@ sub EspLedController_SetHSVColor(@) {
   $cmd->{hsv}->{s}  = $sat            if defined($sat);
   $cmd->{hsv}->{v}  = $val            if defined($val);
   $cmd->{hsv}->{ct} = $colorTemp      if defined($colorTemp);
-  $cmd->{stay}      = $stay           if defined($stay);
   $cmd->{t}         = $fadeTime       if defined($fadeTime);
   $cmd->{s}         = $fadeSpeed      if defined($fadeSpeed);
   $cmd->{q}         = $doQueue        if defined($doQueue);
   $cmd->{r}         = $doRequeue      if defined($doRequeue);
   $cmd->{name}      = $name           if defined($name);
 
-  if (defined($direction)) {
-    $cmd->{d} = ($direction eq 1) ? "long" : "short";
+  my $fwMajorVer = EspLedController_GetFwMajorVersion($hash);
+
+  if ($fwMajorVer >= 6) {
+    if (defined($direction)) {
+      $cmd->{d} = ($direction eq 1) ? "short" : "long";
+    }
+    $cmd->{stay} = $stay           if defined($stay);
+  }
+  else {
+    # fw < 6 only supports numeric direction values
+    # 1 is short in the fw, 0 is long
+    $cmd->{d}   = $direction      if defined($direction);
+    $cmd->{cmd} = "fade";     # we dont support "solid" anymore but set "fade" for compatibility with older fw versions
   }
 
   my $data;
@@ -1433,7 +1455,7 @@ sub EspLedController_ArgsHelper(@) {
 
   my ( $channels, $requeue, $flags, $time, $speed, $name );
   my $queue          = 'single';
-  my $d              = '0';
+  my $d              = '1';
   my $stay = 0;    # stay time for color after fade
   for my $i ( $offset .. $#args ) {
     my $arg = $args[$i];
@@ -1453,6 +1475,11 @@ sub EspLedController_ArgsHelper(@) {
     }
     else {
       ( $flags, $name ) = split /:/, $arg;
+      
+      if ( $flags =~ m/s/i ) {
+        Log3( $hash, 2, "$hash->{NAME}: ArgsHelper: Ignoring solid flag 's'. Flag not supported anymore by this module as it was removed in firmware version >= 6" );
+      }
+
       my $queueBack       = ( $flags =~ m/q/i );
       my $queueFront      = ( $flags =~ m/f/i );
       my $queueFrontReset = ( $flags =~ m/e/i );
@@ -1468,7 +1495,7 @@ sub EspLedController_ArgsHelper(@) {
       }
 
       $requeue = 'true' if ( $flags =~ m/r/i );
-      $d = ( $flags =~ m/l/i ) ? 1 : 0;
+      $d = ( $flags =~ m/l/i ) ? 0 : 1;  # default is short (d=1), if "l" is set, use long (d=0)
     }
   }
 

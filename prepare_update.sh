@@ -1,10 +1,10 @@
-#!/bin/bash   
-rm controls_ledcontroller.txt
+#!/bin/bash
+rm controls_espledcontroller.txt
 find ./FHEM -type f \( ! -iname ".*" \) -print0 | while IFS= read -r -d '' f; 
   do
    echo "DEL ${f}" >> controls_ledcontroller.txt
    out="UPD "$(stat -c %y  $f | cut -d. -f1 | awk '{printf "%s_%s",$1,$2}')" "$(stat -c %s $f)" ${f}"
-   echo ${out//.\//} >> controls_ledcontroller.txt
+   echo ${out//.\//} >> controls_espledcontroller.txt
 done
 
 # CHANGED file
