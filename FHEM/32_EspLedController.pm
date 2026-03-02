@@ -842,6 +842,10 @@ sub EspLedController_ParseInfo(@) {
       readingsBulkUpdate( $hash, 'info-connection-gateway',     $res->{connection}->{gateway} );
       readingsBulkUpdate( $hash, 'info-connection-mac',         $res->{connection}->{mac} );
       
+      if ( exists $res->{connection}->{mqtt} ) {
+          readingsBulkUpdate( $hash, 'info-connection-mqtt-connected', $res->{connection}->{mqtt}->{connected} ? "connected" : "disconnected" );
+      }
+      
       readingsEndUpdate( $hash, 1 );
     }
   }
