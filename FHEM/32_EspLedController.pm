@@ -16,6 +16,7 @@ use JSON;
 use JSON::XS;
 use Data::Dumper;
 use SetExtensions;
+use List::Util qw(any none);
 
 $Data::Dumper::Indent   = 1;
 $Data::Dumper::Sortkeys = 1;
@@ -225,6 +226,9 @@ sub EspLedController_Read($) {
       readingsBulkUpdate( $hash, 'clockCurrentInterval', $obj->{params}{current_interval} );
       readingsEndUpdate( $hash, 1 );
     }
+    elsif (any { $obj->{method} ne $_ } ("info", "config", "state_completed")) {
+      # we ignore these messages here
+    }
     else {
       Log3( $name, 3, "$hash->{NAME}: EspLedController_ProcessRead: Unknown message type: " . $obj->{method} );
     }
@@ -324,12 +328,11 @@ sub EspLedController_Set(@);
 sub EspLedController_Set(@) {
   my ( $hash, $name, $cmd, @args ) = @_;
   
-
   Log3( $hash, 5, "$hash->{NAME} (Set) called with $cmd, busy flag is $hash->{helper}->{isBusy}\n name is $name, args " . Dumper(@args) );
 
   my ( $argsError, $fadeTime, $fadeSpeed, $doQueue, $direction, $doRequeue, $fadeName, $stay, $channels );
 
-  if ( $cmd ne "?" ) {
+  if (none { $cmd eq $_ } ("?", "config", "restart", "fw_update", "security", "toggle_fw")) {
     my %argCmds = ( 'on' => 0, 'off' => 0, 'toggle' => 0, 'blink' => 0, 'pause' => 0, 'skip' => 0, 'continue' => 0, 'stop' => 0 );
     my $argsOffset = 1;
     $argsOffset = $argCmds{$cmd} if ( exists $argCmds{$cmd} );
